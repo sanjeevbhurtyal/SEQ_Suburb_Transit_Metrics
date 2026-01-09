@@ -1,4 +1,5 @@
 import gc
+import numpy as np
 from utils.functions import fetch_gtfs_data, fetch_suburb_data, fetch_gtfs_data_from_web
 from utils.gtfs_schemas import cast_stops_table, cast_routes_table, cast_trips_table, cast_stop_times_table, cast_calendar_table, cast_calendar_dates_table
 import logging
@@ -64,19 +65,7 @@ def valid_gtfs_data():
     start_date = pd.to_datetime(date_range["start_date"])
     end_date = pd.to_datetime(date_range["end_date"])
 
-    # Load calendar_dates and filter invalid services
-    calendar_dates_df = gtfs_data("calendar_dates")
-    # Extract invalid service_ids where exception_type=2 AND date within range
-    invalid_services_df = (
-                        calendar_dates_df[
-                            (calendar_dates_df["exception_type"] == 2) &
-                            (calendar_dates_df["date"].between(start_date, end_date))
-                        ][["service_id"]]
-                        .drop_duplicates()
-                        )
-
     calendar_df = gtfs_data("calendar")
-    calendar_df = calendar_df[~calendar_df["service_id"].isin(invalid_services_df["service_id"])]
     calendar_df["start_date"] = pd.to_datetime(calendar_df["start_date"])
     calendar_df["end_date"] = pd.to_datetime(calendar_df["end_date"])
     calendar_df = calendar_df[
@@ -120,9 +109,6 @@ def valid_gtfs_data():
     # Recompute weekday/weekend based on daily columns
     routes_df["weekday"] = (routes_df[["monday", "tuesday", "wednesday", "thursday", "friday"]].sum(axis=1) > 0).astype(int)
     routes_df["weekend"] = (routes_df[["saturday", "sunday"]].sum(axis=1) > 0).astype(int)
-
-    # Drop unneeded columns
-    routes_df = routes_df.drop(columns=days)
     
     # Join stop_times with routes
     stop_times_df = gtfs_data("stop_times")
@@ -132,7 +118,6 @@ def valid_gtfs_data():
 
 
 def process_route_to_parquet(route, df, output_folder):
-    start_time = time.time()
     records = []
 
     try:
@@ -145,7 +130,7 @@ def process_route_to_parquet(route, df, output_folder):
                 for j in range(i + 1, len(trip_df)):
                     to_row = trip_df.iloc[j]
                     travel_time = max(to_row['arrival_time'] - from_row['departure_time'], pd.Timedelta(0))
-                    travel_time_min = round(travel_time.total_seconds() / 60, 2)
+                    travel_time_min = round(travel_time.total_seconds() / 60, 2) # Travel time in minutes
 
                     records.append({
                         'from_stop_id': from_row['stop_id'],
@@ -156,6 +141,13 @@ def process_route_to_parquet(route, df, output_folder):
                         'route_short_name': route,
                         'route_type': from_row['route_type'],
                         'travel_time': travel_time_min,
+                        'monday': from_row['monday'],
+                        'tuesday': from_row['tuesday'],
+                        'wednesday': from_row['wednesday'],
+                        'thursday': from_row['thursday'],
+                        'friday': from_row['friday'],
+                        'saturday': from_row['saturday'],
+                        'sunday': from_row['sunday'],
                         'weekday': from_row['weekday'],
                         'weekend': from_row['weekend'],
                     })
@@ -248,14 +240,43 @@ if __name__ == "__main__":
         }
     ).drop(columns=['stop_id'])
 
+    weekday_cols = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+    weekend_cols = ['saturday', 'sunday']
+
+    group_cols = ['route_type', 'route_short_name', 'from_loc_code', 'to_loc_code','weekday', 'weekend','from_locality', 'to_locality'] + weekday_cols + weekend_cols
+    
     df_final = df_final.groupby(
-        ['route_type', 'from_loc_code', 'to_loc_code', 'weekday', 'weekend', 'from_locality', 'to_locality']
+        group_cols
     ).agg(
         number_of_trips=('trip_id', 'nunique'),
-        travel_time_min=('travel_time', 'min'),
-        travel_time_max=('travel_time', 'max'),
-        travel_time_median=('travel_time', 'median')
+        travel_time=('travel_time', 'mean')
     ).reset_index()
+
+    df_final = df_final.groupby(
+        ['route_short_name','route_type', 'from_loc_code', 'to_loc_code','from_locality', 'to_locality', 'weekday', 'weekend']
+        ).agg(
+            number_of_routes=('route_short_name', 'nunique'),
+            number_of_trips=('number_of_trips', 'median'),
+            travel_time=('travel_time', 'mean')
+        ).reset_index()
+
+    df_final = df_final.groupby(
+        ['route_type', 'from_loc_code', 'to_loc_code','from_locality', 'to_locality', 'weekday', 'weekend']
+        ).agg(
+            number_of_routes=('route_short_name', 'nunique'),
+            number_of_trips_per_day=('number_of_trips', 'sum'),
+            travel_time_min=('travel_time', 'min'),
+            travel_time_max=('travel_time', 'max'),
+            travel_time_median=('travel_time', 'median')
+        ).reset_index()
+    
+    #Floor number of trips per day
+    df_final['number_of_trips_per_day'] = np.floor(df_final['number_of_trips_per_day']).astype(int)
+
+    # Round travel timeto integer
+    df_final['travel_time_min'] = df_final['travel_time_min'].round().clip(lower=1).astype(int)
+    df_final['travel_time_max'] = df_final['travel_time_max'].round().clip(lower=1).astype(int)
+    df_final['travel_time_median'] = df_final['travel_time_median'].round().clip(lower=1).astype(int)
 
     df_final = df_final[df_final['from_loc_code'] != df_final['to_loc_code']]
 
