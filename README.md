@@ -2,6 +2,10 @@
 
 This Python project processes **GTFS (General Transit Feed Specification) data** to produce a weekly transit summary, including suburb-to-suburb travel times, number of trips, and route coverage across weekdays and weekends. It also maps transit stops to suburb boundaries for spatial context.  
 
+**Analysis Blog Post:** <a href="https://transportaai.github.io/brisbane_connectivity/" target="_blank" rel="noopener noreferrer">Mapping Connectivity Across Brisbane: What GTFS Reveals</a>
+
+**Interactive Dashboard:** <a href="https://public.tableau.com/app/profile/sanjeev.bhurtyal2011/viz/SEQSuburbTransitMetrics/Dashboard" target="_blank" rel="noopener noreferrer">Translink Patronage Analysis Dashboard</a>
+
 ---
 
 ## Features
@@ -51,5 +55,16 @@ Run the main script to process GTFS data and generate the transit summary:
 ```bash
 python main.py
 ```
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Author
+
+**Sanjeev Bhurtyal**
+- GitHub: <a href="https://github.com/sanjeevbhurtyal" target="_blank" rel="noopener noreferrer">@sanjeevbhurtyal</a>
+- LinkedIn: <a href="https://www.linkedin.com/in/sanjeev-bhurtyal/" target="_blank" rel="noopener noreferrer">Sanjeev Bhurtyal</a>
+- Website: <a href="https://transportaai.github.io/" target="_blank" rel="noopener noreferrer">Transport Analytics & Insights</a>
+
+
+*Last Updated: January 2026*
 
